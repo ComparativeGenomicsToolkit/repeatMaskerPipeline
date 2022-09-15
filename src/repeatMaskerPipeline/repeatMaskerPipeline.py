@@ -126,16 +126,16 @@ def makeURL(path):
 
 def parse_args():
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument('species',
-                        nargs="+")
+    Job.Runner.addToilOptions(parser)
     parser.add_argument('output_path')
     parser.add_argument('input_sequences', help="FASTA or gzipped-FASTA file(s)",
                         nargs="+")
+    parser.add_argument('--species',
+                        nargs="+", required=True)    
     parser.add_argument('--engine', default='ncbi')
     parser.add_argument('--split_size', type=int, default=200000)
     parser.add_argument('--no-docker', action='store_true')
     parser.add_argument('--docker-image', default='quay.io/comparative-genomics-toolkit/repeatmasker:dfam3.3')
-    Job.Runner.addToilOptions(parser)
     return parser.parse_args()
 
 def main():
