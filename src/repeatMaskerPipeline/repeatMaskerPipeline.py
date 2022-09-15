@@ -154,10 +154,8 @@ def main():
             input_ids = []
             input_types = []
             input_basenames = []
-            species = []
-            if len(opts.species) == 1:
-                species = opt.species * len(option.input_sequences)
-            assert len(opts.species) == len(opts.input_sequences)
+            species = opt.species * len(option.input_sequences) if len(opt.sepcies) == 1 else opt.species
+            assert len(species) == len(opts.input_sequences)
             for input_sequence in opts.input_sequences:
                 input_sequence_id = toil.importFile(makeURL(input_sequence))
                 if input_sequence.endswith(".gz") or input_sequence.endswith(".gzip"):
