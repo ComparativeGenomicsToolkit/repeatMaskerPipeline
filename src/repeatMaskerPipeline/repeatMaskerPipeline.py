@@ -154,7 +154,7 @@ def main():
             input_ids = []
             input_types = []
             input_basenames = []
-            species = opt.species * len(option.input_sequences) if len(opt.sepcies) == 1 else opt.species
+            species = opts.species * len(option.input_sequences) if len(opts.sepcies) == 1 else opts.species
             assert len(species) == len(opts.input_sequences)
             for input_sequence in opts.input_sequences:
                 input_sequence_id = toil.importFile(makeURL(input_sequence))
