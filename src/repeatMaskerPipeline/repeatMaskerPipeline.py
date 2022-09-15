@@ -132,7 +132,7 @@ def parse_args():
     parser.add_argument('--engine', default='ncbi')
     parser.add_argument('--split_size', type=int, default=200000)
     parser.add_argument('--no-docker', action='store_true')
-    parser.add_argument('--docker-image', default='quay.io/joelarmstrong/repeatmasker')
+    parser.add_argument('--docker-image', default='quay.io/comparative-genomics-toolkit/repeatmasker:dfam3.3')
     Job.Runner.addToilOptions(parser)
     return parser.parse_args()
 
