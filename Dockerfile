@@ -32,18 +32,19 @@ RUN chmod +x /bin/twoBitMask
 RUN wget http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/twoBitToFa -O /bin/twoBitToFa
 RUN chmod +x /bin/twoBitToFa
 
-RUN apt-get install -y cpanminus
+RUN apt-get install -y cpanminus aria2 python3 python3-pip
 RUN cpanm Text::Soundex
+RUN pip3 install h5py
 WORKDIR /RepeatMasker/Libraries
 # Dfam repeat library
-RUN wget http://www.dfam.org/web_download/Current_Release/Dfam.hmm.gz
-RUN gunzip Dfam.hmm.gz
+RUN aria2c -s12 -j12 -x12 https://www.dfam.org/releases/Dfam_3.3/families/Dfam.h5.gz
+RUN gunzip Dfam.h5.gz
 # Copy any libraries from the user
 COPY Libraries/* /RepeatMasker/Libraries/
 # Configuration
-COPY RepeatMaskerConfig.pm /RepeatMasker/
+# COPY RepeatMaskerConfig.pm /RepeatMasker/
 WORKDIR /RepeatMasker
-RUN echo '\n\n\n/bin/trf\n2\n/usr/local/rmblast\n\n5\n' | perl ./configure
+RUN perl ./configure -trf_prgm /bin/trf -rmblast_dir /usr/local/rmblast/bin -default_search_engine rmblast -libdir  /RepeatMasker/Libraries
 
 # Create a thinner final Docker image (the previous steps add ~2GB in useless layers)
 FROM debian:stretch
@@ -54,6 +55,7 @@ COPY --from=builder /usr/local/rmblast /usr/local/rmblast
 # Copy any engines from the user
 COPY engines/* /usr/local/bin/
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y libkrb5-3 libgomp1 perl
+RUN apt-get update && apt-get install -y libkrb5-3 libgomp1 perl python3 python3-pip
+RUN pip3 install h5py
 COPY --from=builder /usr/local/lib/x86_64-linux-gnu/perl/ /usr/local/lib/x86_64-linux-gnu/perl/
 ENV PATH="/RepeatMasker:${PATH}"
