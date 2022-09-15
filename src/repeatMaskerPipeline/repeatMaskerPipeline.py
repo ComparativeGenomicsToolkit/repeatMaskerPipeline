@@ -1,21 +1,28 @@
 #!/usr/bin/env python
 import os
 import shutil
+import time
 from argparse import ArgumentParser
 from glob import glob
 from toil.job import Job
 from toil.common import Toil
 from toil.lib.docker import apiDockerCall
 from subprocess import check_call
+from toil.realtimeLogger import RealtimeLogger
 
 def run_command(job, command, work_dir, opts):
+    start_time = time.time()
     if opts.no_docker:
+        RealtimeLogger.info("Running the command: \"{}\"".format(' '.join(command)))
         check_call(command)
+        RealtimeLogger.info("Successfully ran the command: \"{}\" in {} seconds".format(' '.join(command), time.time() - start_time))
     else:
         # Relativize paths
         new_command = [param.replace(work_dir, '/data') for param in command]
+        RealtimeLogger.info("Running the command: \"{}\"".format(' '.join(new_command)))
         apiDockerCall(job, opts.docker_image, new_command, working_dir='/data',
                       volumes={work_dir: {'bind': '/data', 'mode': 'rw'}})
+        RealtimeLogger.info("Successfully ran the command: \"{}\" in {} seconds".format(' '.join(new_command), time.time() - start_time))
 
 def mask_fasta_job(job, fasta_id, outfile_id, opts):
     temp_dir = job.fileStore.getLocalTempDir()
