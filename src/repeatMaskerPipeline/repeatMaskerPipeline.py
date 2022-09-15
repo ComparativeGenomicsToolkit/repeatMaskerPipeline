@@ -103,10 +103,11 @@ def convert_to_fasta(job, type, input_file, opts):
         raise RuntimeError("unknown compressed file type")
     return job.addChildJobFn(split_fasta_job, uncompressed_fileID, opts).rv()
 
-def launch_parallel(job, inputs, types, basenames, opts):
+def launch_parallel(job, inputs, types, basenames, species_list, opts):
     fasta_ids = []
     outfile_ids = []
-    for input, type in zip(inputs, types):
+    for input, type, species in zip(inputs, types, species_list):
+        opts.species = species
         if type != "fasta":
             child_job = Job.wrapJobFn(convert_to_fasta, type, input, opts)
         else:
@@ -125,7 +126,8 @@ def makeURL(path):
 
 def parse_args():
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument('species')
+    parser.add_argument('species',
+                        nargs="+")
     parser.add_argument('output_path')
     parser.add_argument('input_sequences', help="FASTA or gzipped-FASTA file(s)",
                         nargs="+")
@@ -145,6 +147,10 @@ def main():
             input_ids = []
             input_types = []
             input_basenames = []
+            species = []
+            if len(opts.species) == 1:
+                species = opt.species * len(option.input_sequences)
+            assert len(opts.species) == len(opts.input_sequences)
             for input_sequence in opts.input_sequences:
                 input_sequence_id = toil.importFile(makeURL(input_sequence))
                 if input_sequence.endswith(".gz") or input_sequence.endswith(".gzip"):
@@ -158,7 +164,7 @@ def main():
                 if basename in input_basenames:
                     raise RuntimeError("Inputs must have unique filenames.")
                 input_basenames.append(basename)
-            outfile_ids, fasta_ids, basenames = toil.start(Job.wrapJobFn(launch_parallel, input_ids, input_types, input_basenames, opts))
+            outfile_ids, fasta_ids, basenames = toil.start(Job.wrapJobFn(launch_parallel, input_ids, input_types, input_basenames, species, opts))
         for outfile_id, fasta_id, basename in zip(outfile_ids, fasta_ids, basenames):
             toil.exportFile(fasta_id, makeURL(os.path.join(opts.output_path, basename + '.masked')))
             toil.exportFile(outfile_id, makeURL(os.path.join(opts.output_path, basename + '.out')))
