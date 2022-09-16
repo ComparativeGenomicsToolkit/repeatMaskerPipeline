@@ -107,7 +107,7 @@ def convert_to_fasta(job, type, input_file, species, opts):
     local_file_in = local_file_out + '.gz'
     job.fileStore.readGlobalFile(input_file, local_file_in)
     if type == "gzip":
-        with open(local_file_in) as gzipped, open(local_file_out, 'w') as uncompresed:
+        with open(local_file_in) as gzipped, open(local_file_out, 'w') as uncompressed:
             check_call(["gzip", "-d", "-c"], stdin=gzipped, stdout=uncompressed)
         uncompressed_fileID = job.fileStore.writeGlobalFile(local_file_out)
     else:
