@@ -103,10 +103,13 @@ def split_fasta_job(job, input_fasta, species, opts):
     return job.addFollowOnJobFn(concatenate_job, input_fasta, repeat_masked, opts).rv()
 
 def convert_to_fasta(job, type, input_file, species, opts):
-    local_file = job.fileStore.readGlobalFile(input_file)
+    local_file_out = job.fileStore.getLocalTempFile()
+    local_file_in = loca_file_out + '.gz'
+    job.fileStore.readGlobalFile(input_file, local_file_in)
     if type == "gzip":
-        with open(local_file) as gzipped, job.fileStore.writeGlobalFileStream() as (uncompressed, uncompressed_fileID):
+        with open(local_file_in) as gzipped, open(local_file_out, 'w') as uncompresed:
             check_call(["gzip", "-d", "-c"], stdin=gzipped, stdout=uncompressed)
+        uncompressed_fileID = job.fileStore.writeGlobalFile(local_file_out)
     else:
         raise RuntimeError("unknown compressed file type")
     return job.addChildJobFn(split_fasta_job, uncompressed_fileID, species, opts).rv()
