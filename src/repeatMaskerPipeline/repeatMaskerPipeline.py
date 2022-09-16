@@ -143,7 +143,7 @@ def parse_args():
     parser.add_argument('--species',
                         nargs="+", required=True)    
     parser.add_argument('--engine', default='ncbi')
-    parser.add_argument('--split_size', type=int, default=200000)
+    parser.add_argument('--split_size', type=int, default=20000000)
     parser.add_argument('--no-docker', action='store_true')
     parser.add_argument('--docker-image', default='quay.io/comparative-genomics-toolkit/repeatmasker:dfam3.3')
     return parser.parse_args()
