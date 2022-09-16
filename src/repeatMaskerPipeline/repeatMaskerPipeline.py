@@ -91,7 +91,8 @@ def split_fasta(job, input_fasta, split_size, work_dir, opts):
                 work_dir, opts)
     return lift_file, glob(os.path.join(work_dir, "out*"))
 
-def split_fasta_job(job, input_fasta, opts):
+def split_fasta_job(job, input_fasta, species, opts):
+    opts.species = species
     work_dir = job.fileStore.getLocalTempDir()
     local_fasta = os.path.join(work_dir, 'in.fa')
     job.fileStore.readGlobalFile(input_fasta, local_fasta)
@@ -101,24 +102,23 @@ def split_fasta_job(job, input_fasta, opts):
     repeat_masked = [job.addChildJobFn(repeat_masking_job, id, lift_id, opts.species, opts).rv() for id in split_fasta_ids]
     return job.addFollowOnJobFn(concatenate_job, input_fasta, repeat_masked, opts).rv()
 
-def convert_to_fasta(job, type, input_file, opts):
+def convert_to_fasta(job, type, input_file, species, opts):
     local_file = job.fileStore.readGlobalFile(input_file)
     if type == "gzip":
         with open(local_file) as gzipped, job.fileStore.writeGlobalFileStream() as (uncompressed, uncompressed_fileID):
             check_call(["gzip", "-d", "-c"], stdin=gzipped, stdout=uncompressed)
     else:
         raise RuntimeError("unknown compressed file type")
-    return job.addChildJobFn(split_fasta_job, uncompressed_fileID, opts).rv()
+    return job.addChildJobFn(split_fasta_job, uncompressed_fileID, species, opts).rv()
 
 def launch_parallel(job, inputs, types, basenames, species_list, opts):
     fasta_ids = []
     outfile_ids = []
     for input, type, species in zip(inputs, types, species_list):
-        opts.species = species
         if type != "fasta":
-            child_job = Job.wrapJobFn(convert_to_fasta, type, input, opts)
+            child_job = Job.wrapJobFn(convert_to_fasta, type, input, species, opts)
         else:
-            child_job = Job.wrapJobFn(split_fasta_job, input, opts)
+            child_job = Job.wrapJobFn(split_fasta_job, input, species, opts)
         job.addChild(child_job)
         fasta_ids.append(child_job.rv(0))
         outfile_ids.append(child_job.rv(1))
