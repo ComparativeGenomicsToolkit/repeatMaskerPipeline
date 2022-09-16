@@ -104,7 +104,7 @@ def split_fasta_job(job, input_fasta, species, opts):
 
 def convert_to_fasta(job, type, input_file, species, opts):
     local_file_out = job.fileStore.getLocalTempFile()
-    local_file_in = loca_file_out + '.gz'
+    local_file_in = local_file_out + '.gz'
     job.fileStore.readGlobalFile(input_file, local_file_in)
     if type == "gzip":
         with open(local_file_in) as gzipped, open(local_file_out, 'w') as uncompresed:
