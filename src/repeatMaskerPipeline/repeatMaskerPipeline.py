@@ -33,7 +33,10 @@ def mask_fasta_job(job, fasta_id, outfile_id, opts):
     unmasked_two_bit = os.path.join(temp_dir, 'in.2bit')
     run_command(job, ["faToTwoBit", input_fasta, unmasked_two_bit], temp_dir, opts)
     masked_two_bit = os.path.join(temp_dir, 'out.2bit')
-    run_command(job, ["twoBitMask", "-type=.out", unmasked_two_bit, out_file, masked_two_bit], temp_dir, opts)
+    mask_cmd = ["twoBitMask", "-type=.out", unmasked_two_bit, out_file, masked_two_bit]
+    if not opts.unmask_first:
+        mask_cmd += ['-add']
+    run_command(job, mask_cmd, temp_dir, opts)
     masked_fasta = os.path.join(temp_dir, 'out.fa')
     run_command(job, ["twoBitToFa", masked_two_bit, masked_fasta], temp_dir, opts)
     return job.fileStore.writeGlobalFile(masked_fasta)
@@ -146,6 +149,7 @@ def parse_args():
     parser.add_argument('--split_size', type=int, default=20000000)
     parser.add_argument('--no-docker', action='store_true')
     parser.add_argument('--docker-image', default='quay.io/comparative-genomics-toolkit/repeatmasker:dfam3.3')
+    parser.add_argument('--unmask-first', help="Remove any softmasking beforehand", default=False)
     return parser.parse_args()
 
 def main():
