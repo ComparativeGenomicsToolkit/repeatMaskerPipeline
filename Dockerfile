@@ -55,7 +55,7 @@ COPY --from=builder /usr/local/rmblast /usr/local/rmblast
 # Copy any engines from the user
 COPY engines/* /usr/local/bin/
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y libkrb5-3 libgomp1 perl python3 python3-pip
+RUN apt-get update && apt-get install -y libkrb5-3 libgomp1 perl python3 python3-pip curl
 RUN pip3 install h5py
 COPY --from=builder /usr/local/lib/x86_64-linux-gnu/perl/ /usr/local/lib/x86_64-linux-gnu/perl/
 ENV PATH="/RepeatMasker:${PATH}"

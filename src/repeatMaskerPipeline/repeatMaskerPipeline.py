@@ -1,21 +1,28 @@
 #!/usr/bin/env python
 import os
 import shutil
+import time
 from argparse import ArgumentParser
 from glob import glob
 from toil.job import Job
 from toil.common import Toil
 from toil.lib.docker import apiDockerCall
 from subprocess import check_call
+from toil.realtimeLogger import RealtimeLogger
 
 def run_command(job, command, work_dir, opts):
+    start_time = time.time()
     if opts.no_docker:
+        RealtimeLogger.info("Running the command: \"{}\"".format(' '.join(command)))
         check_call(command)
+        RealtimeLogger.info("Successfully ran the command: \"{}\" in {} seconds".format(' '.join(command), time.time() - start_time))
     else:
         # Relativize paths
         new_command = [param.replace(work_dir, '/data') for param in command]
+        RealtimeLogger.info("Running the command: \"{}\"".format(' '.join(new_command)))
         apiDockerCall(job, opts.docker_image, new_command, working_dir='/data',
                       volumes={work_dir: {'bind': '/data', 'mode': 'rw'}})
+        RealtimeLogger.info("Successfully ran the command: \"{}\" in {} seconds".format(' '.join(new_command), time.time() - start_time))
 
 def mask_fasta_job(job, fasta_id, outfile_id, opts):
     temp_dir = job.fileStore.getLocalTempDir()
@@ -26,7 +33,10 @@ def mask_fasta_job(job, fasta_id, outfile_id, opts):
     unmasked_two_bit = os.path.join(temp_dir, 'in.2bit')
     run_command(job, ["faToTwoBit", input_fasta, unmasked_two_bit], temp_dir, opts)
     masked_two_bit = os.path.join(temp_dir, 'out.2bit')
-    run_command(job, ["twoBitMask", "-type=.out", unmasked_two_bit, out_file, masked_two_bit], temp_dir, opts)
+    mask_cmd = ["twoBitMask", "-type=.out", unmasked_two_bit, out_file, masked_two_bit]
+    if not opts.unmask_first:
+        mask_cmd += ['-add']
+    run_command(job, mask_cmd, temp_dir, opts)
     masked_fasta = os.path.join(temp_dir, 'out.fa')
     run_command(job, ["twoBitToFa", masked_two_bit, masked_fasta], temp_dir, opts)
     return job.fileStore.writeGlobalFile(masked_fasta)
@@ -84,7 +94,8 @@ def split_fasta(job, input_fasta, split_size, work_dir, opts):
                 work_dir, opts)
     return lift_file, glob(os.path.join(work_dir, "out*"))
 
-def split_fasta_job(job, input_fasta, opts):
+def split_fasta_job(job, input_fasta, species, opts):
+    opts.species = species
     work_dir = job.fileStore.getLocalTempDir()
     local_fasta = os.path.join(work_dir, 'in.fa')
     job.fileStore.readGlobalFile(input_fasta, local_fasta)
@@ -94,23 +105,26 @@ def split_fasta_job(job, input_fasta, opts):
     repeat_masked = [job.addChildJobFn(repeat_masking_job, id, lift_id, opts.species, opts).rv() for id in split_fasta_ids]
     return job.addFollowOnJobFn(concatenate_job, input_fasta, repeat_masked, opts).rv()
 
-def convert_to_fasta(job, type, input_file, opts):
-    local_file = job.fileStore.readGlobalFile(input_file)
+def convert_to_fasta(job, type, input_file, species, opts):
+    local_file_out = job.fileStore.getLocalTempFile()
+    local_file_in = local_file_out + '.gz'
+    job.fileStore.readGlobalFile(input_file, local_file_in)
     if type == "gzip":
-        with open(local_file) as gzipped, job.fileStore.writeGlobalFileStream() as (uncompressed, uncompressed_fileID):
+        with open(local_file_in) as gzipped, open(local_file_out, 'w') as uncompressed:
             check_call(["gzip", "-d", "-c"], stdin=gzipped, stdout=uncompressed)
+        uncompressed_fileID = job.fileStore.writeGlobalFile(local_file_out)
     else:
         raise RuntimeError("unknown compressed file type")
-    return job.addChildJobFn(split_fasta_job, uncompressed_fileID, opts).rv()
+    return job.addChildJobFn(split_fasta_job, uncompressed_fileID, species, opts).rv()
 
-def launch_parallel(job, inputs, types, basenames, opts):
+def launch_parallel(job, inputs, types, basenames, species_list, opts):
     fasta_ids = []
     outfile_ids = []
-    for input, type in zip(inputs, types):
+    for input, type, species in zip(inputs, types, species_list):
         if type != "fasta":
-            child_job = Job.wrapJobFn(convert_to_fasta, type, input, opts)
+            child_job = Job.wrapJobFn(convert_to_fasta, type, input, species, opts)
         else:
-            child_job = Job.wrapJobFn(split_fasta_job, input, opts)
+            child_job = Job.wrapJobFn(split_fasta_job, input, species, opts)
         job.addChild(child_job)
         fasta_ids.append(child_job.rv(0))
         outfile_ids.append(child_job.rv(1))
@@ -125,15 +139,17 @@ def makeURL(path):
 
 def parse_args():
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument('species')
+    Job.Runner.addToilOptions(parser)
     parser.add_argument('output_path')
     parser.add_argument('input_sequences', help="FASTA or gzipped-FASTA file(s)",
                         nargs="+")
+    parser.add_argument('--species',
+                        nargs="+", required=True)    
     parser.add_argument('--engine', default='ncbi')
-    parser.add_argument('--split_size', type=int, default=200000)
+    parser.add_argument('--split_size', type=int, default=20000000)
     parser.add_argument('--no-docker', action='store_true')
-    parser.add_argument('--docker-image', default='quay.io/joelarmstrong/repeatmasker')
-    Job.Runner.addToilOptions(parser)
+    parser.add_argument('--docker-image', default='quay.io/comparative-genomics-toolkit/repeatmasker:dfam3.3')
+    parser.add_argument('--unmask-first', help="Remove any softmasking beforehand", default=False)
     return parser.parse_args()
 
 def main():
@@ -145,6 +161,8 @@ def main():
             input_ids = []
             input_types = []
             input_basenames = []
+            species = opts.species * len(opts.input_sequences) if len(opts.species) == 1 else opts.species
+            assert len(species) == len(opts.input_sequences)
             for input_sequence in opts.input_sequences:
                 input_sequence_id = toil.importFile(makeURL(input_sequence))
                 if input_sequence.endswith(".gz") or input_sequence.endswith(".gzip"):
@@ -158,7 +176,7 @@ def main():
                 if basename in input_basenames:
                     raise RuntimeError("Inputs must have unique filenames.")
                 input_basenames.append(basename)
-            outfile_ids, fasta_ids, basenames = toil.start(Job.wrapJobFn(launch_parallel, input_ids, input_types, input_basenames, opts))
+            outfile_ids, fasta_ids, basenames = toil.start(Job.wrapJobFn(launch_parallel, input_ids, input_types, input_basenames, species, opts))
         for outfile_id, fasta_id, basename in zip(outfile_ids, fasta_ids, basenames):
             toil.exportFile(fasta_id, makeURL(os.path.join(opts.output_path, basename + '.masked')))
             toil.exportFile(outfile_id, makeURL(os.path.join(opts.output_path, basename + '.out')))
